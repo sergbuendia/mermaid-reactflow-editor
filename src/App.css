@@ -1729,3 +1729,207 @@ textarea {
     linear-gradient(-45deg, transparent 75%, #374151 75%);
 }
 
+/* ============================================
+   C4 Model Node Styles
+   ============================================ */
+
+/* Base C4 Node Styling */
+.c4-node {
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.c4-node:hover {
+  filter: brightness(1.05);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2) !important;
+}
+
+.c4-node.selected {
+  outline: 3px solid #2563eb !important;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 6px rgba(37, 99, 235, 0.15) !important;
+}
+
+/* C4 Node Labels */
+.c4-label {
+  word-wrap: break-word;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+/* C4 Technology Badge */
+.c4-technology {
+  font-family: monospace;
+}
+
+/* C4 Description */
+.c4-description {
+  word-wrap: break-word;
+  word-break: break-word;
+}
+
+/* C4 Type Badge */
+.c4-type-badge {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+/* C4 Person Node - Special rounded top styling */
+.c4-node.c4-person,
+.c4-node.c4-person_ext {
+  border-radius: 50% 50% 10px 10px !important;
+  padding-top: 12px !important;
+}
+
+/* C4 Database/Queue Nodes - Visual indicators */
+.c4-node.c4-system_db,
+.c4-node.c4-container_db,
+.c4-node.c4-component_db {
+  border-bottom-width: 4px !important;
+}
+
+.c4-node.c4-system_queue,
+.c4-node.c4-container_queue,
+.c4-node.c4-component_queue {
+  border-right-width: 4px !important;
+}
+
+/* External systems - dashed border to indicate external */
+.c4-node.c4-person_ext,
+.c4-node.c4-system_ext,
+.c4-node.c4-container_ext,
+.c4-node.c4-component_ext {
+  border-style: dashed !important;
+}
+
+/* C4 Node Handles */
+.c4-node .react-flow__handle {
+  background: rgba(255, 255, 255, 0.9) !important;
+  border: 2px solid currentColor !important;
+  width: 10px !important;
+  height: 10px !important;
+  opacity: 0 !important;
+  transition: opacity 0.2s, transform 0.2s !important;
+}
+
+.c4-node:hover .react-flow__handle,
+.c4-node.selected .react-flow__handle {
+  opacity: 0.8 !important;
+}
+
+.c4-node .react-flow__handle:hover {
+  opacity: 1 !important;
+  transform: scale(1.2) !important;
+}
+
+/* C4 Node Resizer */
+.c4-node .react-flow__resize-control {
+  background: #2563eb !important;
+  border: 2px solid white !important;
+  width: 10px !important;
+  height: 10px !important;
+  border-radius: 2px !important;
+}
+
+/* ============================================
+   C4 Boundary Node Styles
+   ============================================ */
+
+/* Base C4 Boundary Styling */
+.c4-boundary-node {
+  transition: all 0.2s ease;
+}
+
+.c4-boundary-node.selected {
+  outline: 2px solid #6366f1;
+  outline-offset: -1px;
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+}
+
+/* C4 Boundary Header */
+.c4-boundary-header {
+  user-select: none;
+}
+
+/* C4 Boundary Types */
+.c4-boundary-enterprise {
+  border-style: dashed !important;
+}
+
+.c4-boundary-system {
+  border-color: #1168BD !important;
+}
+
+.c4-boundary-container {
+  border-color: #438DD5 !important;
+}
+
+/* C4 Boundary Handles */
+.c4-boundary-node .react-flow__handle {
+  opacity: 0 !important;
+  transition: opacity 0.2s !important;
+}
+
+.c4-boundary-node:hover .react-flow__handle,
+.c4-boundary-node.selected .react-flow__handle {
+  opacity: 0.6 !important;
+}
+
+/* C4 Boundary Resizer */
+.c4-boundary-node .react-flow__resize-control {
+  background: #6366f1 !important;
+  border: 2px solid white !important;
+  width: 12px !important;
+  height: 12px !important;
+  border-radius: 3px !important;
+}
+
+/* Hide side resize handles for C4 boundaries */
+.c4-boundary-node .react-flow__resize-control[data-position="top"],
+.c4-boundary-node .react-flow__resize-control[data-position="bottom"],
+.c4-boundary-node .react-flow__resize-control[data-position="left"],
+.c4-boundary-node .react-flow__resize-control[data-position="right"] {
+  display: none !important;
+}
+
+/* ============================================
+   C4 Edge/Relationship Styles
+   ============================================ */
+
+/* C4 edges have a distinct gray color */
+.react-flow__edge.c4-edge .react-flow__edge-path {
+  stroke: #707070;
+  stroke-width: 2;
+}
+
+/* C4 edge labels */
+.react-flow__edge.c4-edge .react-flow__edge-text {
+  font-size: 11px !important;
+}
+
+/* React Flow node type overrides for C4 */
+.react-flow__node-c4 {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.react-flow__node-c4.selected {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.react-flow__node-c4Boundary {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.react-flow__node-c4Boundary.selected {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+

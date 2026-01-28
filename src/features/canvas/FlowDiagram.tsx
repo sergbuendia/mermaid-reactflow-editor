@@ -38,6 +38,8 @@ import { CustomNode } from './nodes/CustomNode';
 import { DiamondNode } from './nodes/DiamondNode';
 import { NodeEditor } from '@/components/NodeEditor';
 import { SubgraphNode } from './nodes/SubgraphNode';
+import { C4Node } from './nodes/C4Node';
+import { C4BoundaryNode } from './nodes/C4BoundaryNode';
 import { EditingToolbar } from '@/components/EditingToolbar';
 import { EdgeLabelEditor } from '@/components/EdgeLabelEditor';
 import PaletteToolbar from '@/components/PaletteToolbar';
@@ -98,8 +100,11 @@ function FlowDiagramInternal({
   const nodeTypes = useMemo(
     () => ({
       custom: CustomNode,
-  diamond: DiamondNode,
+      diamond: DiamondNode,
       group: SubgraphNode,
+      // C4 node types
+      c4: C4Node,
+      c4Boundary: C4BoundaryNode,
     }),
     []
   );

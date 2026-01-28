@@ -5,6 +5,10 @@
  * - IDs must NOT depend on node position
  * - IDs must survive layout changes
  * - Subgraphs must be preserved
+ *
+ * Supports:
+ * - Flowchart diagrams (graph, flowchart)
+ * - C4Context diagrams (C4Context)
  */
 
 import type {
@@ -17,13 +21,43 @@ import type {
   SubgraphId,
   NodeKind,
   GraphMeta,
+  C4Node,
+  C4Edge,
+  C4Boundary,
+  C4ElementType,
+  C4BoundaryType,
 } from "./graph.model";
+
+/**
+ * Detect diagram type from Mermaid code.
+ */
+function detectDiagramType(code: string): "flowchart" | "c4context" {
+  const trimmedCode = code.trim().toLowerCase();
+  if (trimmedCode.startsWith("c4context")) {
+    return "c4context";
+  }
+  return "flowchart";
+}
 
 /**
  * Parse Mermaid code and produce a semantic GraphModel.
  * No visual/layout information is included.
+ * Automatically detects diagram type (flowchart or C4Context).
  */
 export function parseMermaidToGraph(mermaidCode: string): Graph {
+  const diagramType = detectDiagramType(mermaidCode);
+
+  if (diagramType === "c4context") {
+    return parseC4Context(mermaidCode);
+  }
+
+  return parseFlowchart(mermaidCode);
+}
+
+/**
+ * Parse Flowchart/Graph diagram.
+ */
+function parseFlowchart(mermaidCode: string): Graph {
   const nodeMap: Record<NodeId, Node> = {};
   const edgeMap: Record<EdgeId, Edge> = {};
   const subgraphMap: Record<SubgraphId, Subgraph> = {};
@@ -216,14 +250,293 @@ export function parseMermaidToGraph(mermaidCode: string): Graph {
   }
 
   return {
-    meta: { direction },
+    meta: { direction, diagramType: "flowchart" },
     nodes: nodeMap,
     edges: edgeMap,
     subgraphs: subgraphMap,
   };
 }
 
-// --- Helper functions ---
+// ============================================================================
+// C4Context Parser
+// ============================================================================
+
+/**
+ * Parse C4Context diagram.
+ */
+function parseC4Context(mermaidCode: string): Graph {
+  const nodeMap: Record<NodeId, C4Node> = {};
+  const edgeMap: Record<EdgeId, C4Edge> = {};
+  const boundaryMap: Record<SubgraphId, C4Boundary> = {};
+
+  // Default direction for C4 is TB
+  const direction: GraphMeta["direction"] = "TB";
+  let title: string | undefined;
+
+  // Clean up code: remove comments and normalize
+  const lines = mermaidCode
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith("%%"));
+
+  const boundaryStack: SubgraphId[] = [];
+  let edgeIndex = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Skip C4Context declaration
+    if (line.toLowerCase().startsWith("c4context")) {
+      continue;
+    }
+
+    // Parse title
+    if (line.toLowerCase().startsWith("title ")) {
+      title = line.slice(6).trim();
+      continue;
+    }
+
+    // Parse boundary closing
+    if (line === "}") {
+      if (boundaryStack.length > 0) {
+        boundaryStack.pop();
+      }
+      continue;
+    }
+
+    // Parse boundaries (Enterprise_Boundary, System_Boundary, Container_Boundary, Boundary)
+    const boundaryMatch = parseBoundaryLine(line);
+    if (boundaryMatch) {
+      const parentId = boundaryStack.length > 0 ? boundaryStack[boundaryStack.length - 1] : undefined;
+
+      const boundary: C4Boundary = {
+        id: boundaryMatch.id,
+        label: boundaryMatch.label,
+        boundaryType: boundaryMatch.boundaryType,
+        parent: parentId,
+        children: [],
+        tags: boundaryMatch.tags,
+      };
+
+      boundaryMap[boundaryMatch.id] = boundary;
+      boundaryStack.push(boundaryMatch.id);
+      continue;
+    }
+
+    // Parse C4 elements (Person, System, Container, Component)
+    const elementMatch = parseC4ElementLine(line);
+    if (elementMatch) {
+      const parentId = boundaryStack.length > 0 ? boundaryStack[boundaryStack.length - 1] : undefined;
+
+      const node: C4Node = {
+        id: elementMatch.id,
+        label: elementMatch.label,
+        kind: "rect", // C4 elements use rect as base
+        c4Type: elementMatch.c4Type,
+        description: elementMatch.description,
+        technology: elementMatch.technology,
+        sprite: elementMatch.sprite,
+        tags: elementMatch.tags,
+        parent: parentId,
+      };
+
+      nodeMap[elementMatch.id] = node;
+
+      // Add to parent boundary's children
+      if (parentId && boundaryMap[parentId]) {
+        boundaryMap[parentId].children.push(elementMatch.id);
+      }
+      continue;
+    }
+
+    // Parse relationships (Rel, BiRel, Rel_U, Rel_D, Rel_L, Rel_R)
+    const relMatch = parseC4RelLine(line);
+    if (relMatch) {
+      const edgeId: EdgeId = `e-${relMatch.from}-${relMatch.to}-${edgeIndex++}`;
+
+      const edge: C4Edge = {
+        id: edgeId,
+        from: relMatch.from,
+        to: relMatch.to,
+        label: relMatch.label,
+        kind: relMatch.bidirectional ? "bidirectional" : "directed",
+        technology: relMatch.technology,
+        description: relMatch.description,
+        tags: relMatch.tags,
+      };
+
+      edgeMap[edgeId] = edge;
+      continue;
+    }
+  }
+
+  return {
+    meta: { direction, title, diagramType: "c4context" },
+    nodes: nodeMap,
+    edges: edgeMap,
+    subgraphs: boundaryMap,
+  };
+}
+
+// --- C4 Parsing Helpers ---
+
+interface BoundaryParseResult {
+  id: string;
+  label: string;
+  boundaryType: C4BoundaryType;
+  tags?: string[];
+}
+
+function parseBoundaryLine(line: string): BoundaryParseResult | null {
+  // Enterprise_Boundary(alias, "label") {
+  // System_Boundary(alias, "label") {
+  // Container_Boundary(alias, "label") {
+  // Boundary(alias, "label", "type") {
+
+  const patterns: Array<{ regex: RegExp; type: C4BoundaryType }> = [
+    { regex: /^Enterprise_Boundary\s*\(\s*([^,]+)\s*,\s*"([^"]*)"\s*\)\s*\{?$/i, type: "enterprise" },
+    { regex: /^System_Boundary\s*\(\s*([^,]+)\s*,\s*"([^"]*)"\s*\)\s*\{?$/i, type: "system" },
+    { regex: /^Container_Boundary\s*\(\s*([^,]+)\s*,\s*"([^"]*)"\s*\)\s*\{?$/i, type: "container" },
+    { regex: /^Boundary\s*\(\s*([^,]+)\s*,\s*"([^"]*)"(?:\s*,\s*"([^"]*)")?\s*\)\s*\{?$/i, type: "boundary" },
+  ];
+
+  for (const { regex, type } of patterns) {
+    const match = line.match(regex);
+    if (match) {
+      return {
+        id: match[1].trim(),
+        label: match[2],
+        boundaryType: type,
+      };
+    }
+  }
+
+  return null;
+}
+
+interface C4ElementParseResult {
+  id: string;
+  label: string;
+  c4Type: C4ElementType;
+  description?: string;
+  technology?: string;
+  sprite?: string;
+  tags?: string[];
+}
+
+function parseC4ElementLine(line: string): C4ElementParseResult | null {
+  // Person(alias, "label", "description")
+  // Person_Ext(alias, "label", "description")
+  // System(alias, "label", "description")
+  // System_Ext(alias, "label", "description")
+  // SystemDb(alias, "label", "description")
+  // SystemQueue(alias, "label", "description")
+  // Container(alias, "label", "technology", "description")
+  // Container_Ext(alias, "label", "technology", "description")
+  // ContainerDb(alias, "label", "technology", "description")
+  // ContainerQueue(alias, "label", "technology", "description")
+  // Component(alias, "label", "technology", "description")
+  // Component_Ext(alias, "label", "technology", "description")
+  // ComponentDb(alias, "label", "technology", "description")
+  // ComponentQueue(alias, "label", "technology", "description")
+
+  // Map of element names to their C4ElementType
+  const elementTypeMap: Record<string, C4ElementType> = {
+    "person": "person",
+    "person_ext": "person_ext",
+    "system": "system",
+    "system_ext": "system_ext",
+    "systemdb": "system_db",
+    "systemqueue": "system_queue",
+    "container": "container",
+    "container_ext": "container_ext",
+    "containerdb": "container_db",
+    "containerqueue": "container_queue",
+    "component": "component",
+    "component_ext": "component_ext",
+    "componentdb": "component_db",
+    "componentqueue": "component_queue",
+  };
+
+  // Elements without technology: Person, Person_Ext, System, System_Ext, SystemDb, SystemQueue
+  const noTechPattern = /^(Person|Person_Ext|System|System_Ext|SystemDb|SystemQueue)\s*\(\s*([^,]+)\s*,\s*"([^"]*)"(?:\s*,\s*"([^"]*)")?\s*\)$/i;
+
+  // Elements with technology: Container*, Component*
+  const withTechPattern = /^(Container|Container_Ext|ContainerDb|ContainerQueue|Component|Component_Ext|ComponentDb|ComponentQueue)\s*\(\s*([^,]+)\s*,\s*"([^"]*)"(?:\s*,\s*"([^"]*)")?(?:\s*,\s*"([^"]*)")?\s*\)$/i;
+
+  let match = line.match(noTechPattern);
+  if (match) {
+    const typeName = match[1].toLowerCase().replace("_", "_");
+    const c4Type = elementTypeMap[typeName];
+    if (c4Type) {
+      return {
+        id: match[2].trim(),
+        label: match[3],
+        c4Type,
+        description: match[4] || undefined,
+      };
+    }
+  }
+
+  match = line.match(withTechPattern);
+  if (match) {
+    const typeName = match[1].toLowerCase().replace("_", "_");
+    const c4Type = elementTypeMap[typeName];
+    if (c4Type) {
+      return {
+        id: match[2].trim(),
+        label: match[3],
+        c4Type,
+        technology: match[4] || undefined,
+        description: match[5] || undefined,
+      };
+    }
+  }
+
+  return null;
+}
+
+interface C4RelParseResult {
+  from: string;
+  to: string;
+  label?: string;
+  technology?: string;
+  description?: string;
+  bidirectional: boolean;
+  tags?: string[];
+}
+
+function parseC4RelLine(line: string): C4RelParseResult | null {
+  // Rel(from, to, "label", "technology", "description")
+  // BiRel(from, to, "label", "technology", "description")
+  // Rel_U(from, to, "label", "technology", "description")
+  // Rel_D(from, to, "label", "technology", "description")
+  // Rel_L(from, to, "label", "technology", "description")
+  // Rel_R(from, to, "label", "technology", "description")
+  // Rel_Up, Rel_Down, Rel_Left, Rel_Right (aliases)
+  // Rel_Back, Rel_Neighbor (other variants)
+
+  const relPattern = /^(Rel|BiRel|Rel_U|Rel_D|Rel_L|Rel_R|Rel_Up|Rel_Down|Rel_Left|Rel_Right|Rel_Back|Rel_Neighbor)\s*\(\s*([^,]+)\s*,\s*([^,]+)(?:\s*,\s*"([^"]*)")?(?:\s*,\s*"([^"]*)")?(?:\s*,\s*"([^"]*)")?\s*\)$/i;
+
+  const match = line.match(relPattern);
+  if (match) {
+    const relType = match[1].toLowerCase();
+    const bidirectional = relType === "birel";
+
+    return {
+      from: match[2].trim(),
+      to: match[3].trim(),
+      label: match[4] || undefined,
+      technology: match[5] || undefined,
+      description: match[6] || undefined,
+      bidirectional,
+    };
+  }
+
+  return null;
+}
+
+// --- Flowchart Helper functions ---
 
 function preprocessMultilineDefinitions(code: string): string {
   const rawLines = code.split("\n");
