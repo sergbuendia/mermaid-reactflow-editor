@@ -30,7 +30,16 @@ export type {
   NodeKind,
   EdgeKind,
   GraphMeta,
+  // C4 types
+  C4Node,
+  C4Edge,
+  C4Boundary,
+  C4ElementType,
+  C4BoundaryType,
 } from "./graph.model";
+
+// Type guards for C4
+export { isC4Node, isC4Edge, isC4Boundary } from "./graph.model";
 
 // Types - VisualState (layout)
 export type {

@@ -6,7 +6,8 @@
  */
 
 import dagre from "dagre";
-import type { Graph, Node, NodeId, SubgraphId } from "./graph.model";
+import type { Graph, Node, NodeId, SubgraphId, C4Node } from "./graph.model";
+import { isC4Node } from "./graph.model";
 import type { VisualState, NodeVisual, SubgraphVisual, Position, Size } from "./visual.model";
 import { LAYOUT_SPACING } from "@/constants/layout";
 
@@ -146,7 +147,7 @@ interface SubgraphLayout {
 
 // --- Helper functions ---
 
-function calculateNodeSize(node: Node): Size {
+function calculateNodeSize(node: Node | C4Node): Size {
   const lines = node.label.split("\n");
 
   // Measure text width (simplified heuristic)
@@ -156,6 +157,36 @@ function calculateNodeSize(node: Node): Size {
   }
 
   const maxLineWidth = Math.max(...lines.map((line) => Math.ceil(measureLineWidth(line))));
+
+  // Check if it's a C4 node
+  if (isC4Node(node)) {
+    const c4Node = node as C4Node;
+    const isPerson = c4Node.c4Type.includes("person");
+
+    // C4 nodes need more space for description and technology
+    let extraHeight = 0;
+    if (c4Node.description) {
+      const descLines = Math.ceil(c4Node.description.length / 25); // ~25 chars per line
+      extraHeight += descLines * 14;
+    }
+    if (c4Node.technology) {
+      extraHeight += 18;
+    }
+
+    if (isPerson) {
+      // Person nodes are taller with icon
+      return {
+        width: Math.max(120, maxLineWidth + 40),
+        height: Math.max(140, 80 + extraHeight),
+      };
+    }
+
+    // Regular C4 element (System, Container, Component)
+    return {
+      width: Math.max(180, maxLineWidth + 60),
+      height: Math.max(100, 60 + extraHeight),
+    };
+  }
 
   const baseWidth = maxLineWidth + 30;
   const baseHeight = lines.length * 18 + 20;

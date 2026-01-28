@@ -102,3 +102,50 @@ flowchart TD
     J --> P[Error Response]
     M --> P
 ```
+
+## C4 Context Diagram
+
+```mermaid
+C4Context
+    title System Context diagram for Internet Banking System
+
+    Enterprise_Boundary(b0, "Big Bank plc") {
+        Person(customerA, "Banking Customer A", "A customer of the bank with personal accounts")
+
+        System(SystemAA, "Internet Banking System", "Allows customers to view information about their bank accounts")
+    }
+
+    Person_Ext(customerC, "Banking Customer C", "A customer of another bank")
+
+    System_Ext(SystemE, "E-mail System", "The internal Microsoft Exchange e-mail system")
+    System_Ext(SystemC, "Mainframe Banking System", "Stores all of the core banking information")
+
+    Rel(customerA, SystemAA, "Views account balances and makes payments using")
+    Rel(SystemAA, SystemE, "Sends e-mail using", "SMTP")
+    Rel(SystemAA, SystemC, "Gets account information from", "SOAP")
+    Rel(customerC, SystemAA, "Uses", "HTTPS")
+    Rel(SystemE, customerA, "Sends e-mails to")
+```
+
+## C4 Container Diagram Example
+
+```mermaid
+C4Context
+    title Container diagram for Internet Banking System
+
+    System_Boundary(s0, "Internet Banking System") {
+        Container(webApp, "Web Application", "Java and Spring", "Delivers content")
+        Container(apiApp, "API Application", "Java and Spring", "JSON/HTTPS API")
+        ContainerDb(db, "Database", "Oracle", "Stores user data")
+        ContainerQueue(mq, "Message Queue", "RabbitMQ", "Handles async tasks")
+    }
+
+    Person(customer, "Customer", "A bank customer")
+    System_Ext(mainframe, "Mainframe", "Core banking system")
+
+    Rel(customer, webApp, "Uses", "HTTPS")
+    Rel(webApp, apiApp, "Makes API calls", "JSON/HTTPS")
+    Rel(apiApp, db, "Reads/Writes", "JDBC")
+    Rel(apiApp, mq, "Sends messages", "AMQP")
+    Rel(apiApp, mainframe, "Gets data from", "SOAP/XML")
+```

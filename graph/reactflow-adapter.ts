@@ -5,10 +5,25 @@
  * - React Flow IDs map 1:1 to GraphModel IDs
  * - Positions come ONLY from VisualState
  * - No semantic logic inside UI layer
+ *
+ * Supports:
+ * - Flowchart diagrams
+ * - C4Context diagrams
  */
 
 import { Node as RFNode, Edge as RFEdge, MarkerType, Position } from "reactflow";
-import type { Graph, Node, NodeId, SubgraphId } from "./graph.model";
+import type {
+  Graph,
+  Node,
+  NodeId,
+  SubgraphId,
+  C4Node,
+  C4Edge,
+  C4Boundary,
+  C4ElementType,
+  C4BoundaryType,
+} from "./graph.model";
+import { isC4Node, isC4Edge, isC4Boundary } from "./graph.model";
 import type { VisualState } from "./visual.model";
 
 export interface ReactFlowData {
@@ -39,6 +54,35 @@ const SUBGRAPH_COLORS = [
 // Edge colors for variety
 const EDGE_COLORS = ["#1976D2", "#388E3C", "#F57C00", "#7B1FA2", "#C2185B"];
 
+// C4 color schemes for different element types
+const C4_COLORS: Record<C4ElementType, { bg: string; border: string; text: string }> = {
+  person: { bg: "#08427B", border: "#052E56", text: "#FFFFFF" },
+  person_ext: { bg: "#999999", border: "#6B6B6B", text: "#FFFFFF" },
+  system: { bg: "#1168BD", border: "#0B4884", text: "#FFFFFF" },
+  system_ext: { bg: "#999999", border: "#6B6B6B", text: "#FFFFFF" },
+  system_db: { bg: "#1168BD", border: "#0B4884", text: "#FFFFFF" },
+  system_queue: { bg: "#1168BD", border: "#0B4884", text: "#FFFFFF" },
+  container: { bg: "#438DD5", border: "#2E6295", text: "#FFFFFF" },
+  container_ext: { bg: "#999999", border: "#6B6B6B", text: "#FFFFFF" },
+  container_db: { bg: "#438DD5", border: "#2E6295", text: "#FFFFFF" },
+  container_queue: { bg: "#438DD5", border: "#2E6295", text: "#FFFFFF" },
+  component: { bg: "#85BBF0", border: "#5D9BD5", text: "#000000" },
+  component_ext: { bg: "#CCCCCC", border: "#999999", text: "#000000" },
+  component_db: { bg: "#85BBF0", border: "#5D9BD5", text: "#000000" },
+  component_queue: { bg: "#85BBF0", border: "#5D9BD5", text: "#000000" },
+};
+
+// C4 Boundary colors
+const C4_BOUNDARY_COLORS: Record<C4BoundaryType, { bg: string; border: string; text: string }> = {
+  enterprise: { bg: "rgba(221, 221, 221, 0.3)", border: "#8B8B8B", text: "#4A4A4A" },
+  system: { bg: "rgba(17, 104, 189, 0.1)", border: "#1168BD", text: "#1168BD" },
+  container: { bg: "rgba(67, 141, 213, 0.1)", border: "#438DD5", text: "#438DD5" },
+  boundary: { bg: "rgba(200, 200, 200, 0.2)", border: "#999999", text: "#666666" },
+};
+
+// C4 Edge color (gray for relationships)
+const C4_EDGE_COLOR = "#707070";
+
 /**
  * Convert GraphModel + VisualState to React Flow elements.
  *
@@ -52,50 +96,89 @@ export function toReactFlow(graph: Graph, visualState: VisualState): ReactFlowDa
 
   const direction = graph.meta.direction;
   const isHorizontal = direction === "LR" || direction === "RL";
+  const isC4Diagram = graph.meta.diagramType === "c4context";
 
-  // 1. Create subgraph container nodes (in hierarchical order)
+  // 1. Create subgraph/boundary container nodes (in hierarchical order)
   const orderedSubgraphs = getSubgraphsInHierarchicalOrder(graph);
   orderedSubgraphs.forEach((subgraphId, index) => {
     const subgraph = graph.subgraphs[subgraphId];
     const visual = visualState.subgraphs[subgraphId];
     if (!visual) return;
 
-    const colors = SUBGRAPH_COLORS[index % SUBGRAPH_COLORS.length];
+    if (isC4Diagram && isC4Boundary(subgraph)) {
+      // C4 Boundary
+      const boundaryColors = C4_BOUNDARY_COLORS[subgraph.boundaryType] || C4_BOUNDARY_COLORS.boundary;
 
-    reactFlowNodes.push({
-      id: `subgraph-${subgraphId}`,
-      type: "group",
-      position: visual.position,
-      data: {
-        label: subgraph.label || subgraphId,
-        isSubgraph: true,
-      },
-      style: {
-        backgroundColor: colors.bg,
-        border: `3px solid ${colors.border}`,
-        borderRadius: "12px",
-        width: visual.size.width,
-        height: visual.size.height,
-        boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
-        zIndex: 0,
-      },
-      selectable: true,
-      draggable: !visual.locked,
-      connectable: true,
-      parentNode: subgraph.parent ? `subgraph-${subgraph.parent}` : undefined,
-      extent: subgraph.parent ? "parent" : undefined,
-      zIndex: subgraph.parent ? 1 : 0,
-    });
+      reactFlowNodes.push({
+        id: `subgraph-${subgraphId}`,
+        type: "c4Boundary",
+        position: visual.position,
+        data: {
+          label: subgraph.label || subgraphId,
+          boundaryType: subgraph.boundaryType,
+          isSubgraph: true,
+        },
+        style: {
+          backgroundColor: boundaryColors.bg,
+          border: `2px dashed ${boundaryColors.border}`,
+          borderRadius: "12px",
+          width: visual.size.width,
+          height: visual.size.height,
+          zIndex: 0,
+        },
+        selectable: true,
+        draggable: !visual.locked,
+        connectable: true,
+        parentNode: subgraph.parent ? `subgraph-${subgraph.parent}` : undefined,
+        extent: subgraph.parent ? "parent" : undefined,
+        zIndex: subgraph.parent ? 1 : 0,
+      });
+    } else {
+      // Regular subgraph
+      const colors = SUBGRAPH_COLORS[index % SUBGRAPH_COLORS.length];
+
+      reactFlowNodes.push({
+        id: `subgraph-${subgraphId}`,
+        type: "group",
+        position: visual.position,
+        data: {
+          label: subgraph.label || subgraphId,
+          isSubgraph: true,
+        },
+        style: {
+          backgroundColor: colors.bg,
+          border: `3px solid ${colors.border}`,
+          borderRadius: "12px",
+          width: visual.size.width,
+          height: visual.size.height,
+          boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
+          zIndex: 0,
+        },
+        selectable: true,
+        draggable: !visual.locked,
+        connectable: true,
+        parentNode: subgraph.parent ? `subgraph-${subgraph.parent}` : undefined,
+        extent: subgraph.parent ? "parent" : undefined,
+        zIndex: subgraph.parent ? 1 : 0,
+      });
+    }
   });
 
-  // 2. Create regular nodes
+  // 2. Create nodes
   for (const nodeId of Object.keys(graph.nodes)) {
     const node = graph.nodes[nodeId];
     const visual = visualState.nodes[nodeId];
     if (!visual) continue;
 
-    const rfNode = createReactFlowNode(node, visual, direction);
-    reactFlowNodes.push(rfNode);
+    if (isC4Diagram && isC4Node(node)) {
+      // C4 Node
+      const rfNode = createC4ReactFlowNode(node, visual, direction);
+      reactFlowNodes.push(rfNode);
+    } else {
+      // Regular node
+      const rfNode = createReactFlowNode(node as Node, visual, direction);
+      reactFlowNodes.push(rfNode);
+    }
   }
 
   // 3. Create edges
@@ -104,18 +187,31 @@ export function toReactFlow(graph: Graph, visualState: VisualState): ReactFlowDa
     const edge = graph.edges[edgeId];
     const edgeVisual = visualState.edges[edgeId];
 
-    const rfEdge = createReactFlowEdge(
-      edgeId,
-      edge.from,
-      edge.to,
-      edge.label,
-      edge.kind,
-      edgeIndex++,
-      isHorizontal,
-      graph,
-      edgeVisual?.bendPoints
-    );
-    reactFlowEdges.push(rfEdge);
+    if (isC4Diagram && isC4Edge(edge)) {
+      // C4 Edge (relationship)
+      const rfEdge = createC4ReactFlowEdge(
+        edgeId,
+        edge,
+        isHorizontal,
+        graph,
+        edgeVisual?.bendPoints
+      );
+      reactFlowEdges.push(rfEdge);
+    } else {
+      // Regular edge
+      const rfEdge = createReactFlowEdge(
+        edgeId,
+        edge.from,
+        edge.to,
+        edge.label,
+        edge.kind,
+        edgeIndex++,
+        isHorizontal,
+        graph,
+        edgeVisual?.bendPoints
+      );
+      reactFlowEdges.push(rfEdge);
+    }
   }
 
   return { nodes: reactFlowNodes, edges: reactFlowEdges };
@@ -259,6 +355,124 @@ function createReactFlowEdge(
     zIndex: 0,
     // TODO: Apply bendPoints for edge routing when supported
     data: { bendPoints },
+  };
+}
+
+// --- C4 Helper functions ---
+
+function createC4ReactFlowNode(
+  node: C4Node,
+  visual: { position: { x: number; y: number }; size?: { width: number; height: number }; locked?: boolean },
+  direction: string
+): RFNode {
+  const colors = C4_COLORS[node.c4Type] || C4_COLORS.system;
+  const isPerson = node.c4Type.includes("person");
+
+  const isHorizontal = direction === "LR" || direction === "RL";
+  const sourcePos = isHorizontal ? Position.Right : Position.Bottom;
+  const targetPos = isHorizontal ? Position.Left : Position.Top;
+
+  // Default sizes based on C4 type
+  const defaultWidth = isPerson ? 120 : 180;
+  const defaultHeight = isPerson ? 140 : 100;
+
+  const width = visual.size?.width ?? defaultWidth;
+  const height = visual.size?.height ?? defaultHeight;
+
+  return {
+    id: node.id,
+    type: "c4",
+    position: visual.position,
+    data: {
+      label: node.label,
+      c4Type: node.c4Type,
+      description: node.description,
+      technology: node.technology,
+      sprite: node.sprite,
+      tags: node.tags,
+    },
+    style: {
+      width,
+      height,
+    },
+    sourcePosition: sourcePos,
+    targetPosition: targetPos,
+    parentNode: node.parent ? `subgraph-${node.parent}` : undefined,
+    extent: node.parent ? "parent" : undefined,
+    draggable: !visual.locked,
+    zIndex: 1,
+  };
+}
+
+function createC4ReactFlowEdge(
+  edgeId: string,
+  edge: C4Edge,
+  isHorizontal: boolean,
+  graph: Graph,
+  bendPoints?: { x: number; y: number }[]
+): RFEdge {
+  // Check if source/target are subgraphs/boundaries
+  const isSourceSubgraph = graph.subgraphs[edge.from] !== undefined;
+  const isTargetSubgraph = graph.subgraphs[edge.to] !== undefined;
+
+  const sourceId = isSourceSubgraph ? `subgraph-${edge.from}` : edge.from;
+  const targetId = isTargetSubgraph ? `subgraph-${edge.to}` : edge.to;
+
+  const edgeStyle: Record<string, unknown> = {
+    stroke: C4_EDGE_COLOR,
+    strokeWidth: 2,
+  };
+
+  // Create label with technology if present
+  let labelText = edge.label || "";
+  if (edge.technology) {
+    labelText = labelText ? `${labelText}\n[${edge.technology}]` : `[${edge.technology}]`;
+  }
+
+  // For bidirectional edges, add marker at start as well
+  const markerStart = edge.kind === "bidirectional"
+    ? {
+        type: MarkerType.ArrowClosed,
+        width: 16,
+        height: 16,
+        color: C4_EDGE_COLOR,
+      }
+    : undefined;
+
+  return {
+    id: edgeId,
+    source: sourceId,
+    target: targetId,
+    label: labelText || undefined,
+    type: "smoothstep",
+    animated: false, // C4 edges typically not animated
+    style: edgeStyle,
+    labelStyle: {
+      fontSize: "11px",
+      fontWeight: "400",
+      color: C4_EDGE_COLOR,
+      backgroundColor: "white",
+      padding: "2px 6px",
+      borderRadius: "4px",
+      border: `1px solid ${C4_EDGE_COLOR}`,
+      whiteSpace: "pre-wrap",
+      textAlign: "center",
+    },
+    markerEnd: {
+      type: MarkerType.ArrowClosed,
+      width: 16,
+      height: 16,
+      color: C4_EDGE_COLOR,
+    },
+    markerStart,
+    sourceHandle: isHorizontal ? "right-source" : "bottom-source",
+    targetHandle: isHorizontal ? "left-target" : "top-target",
+    zIndex: 0,
+    data: {
+      bendPoints,
+      technology: edge.technology,
+      description: edge.description,
+    },
   };
 }
 
